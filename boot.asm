@@ -21,7 +21,7 @@ stack_top:
 
 SECTION .text
 
-	GLOBAL _start : function(_start.end - _start)
+	GLOBAL _start:function (_start.end - _start)
 
 _start:
 	mov esp, stack_top
