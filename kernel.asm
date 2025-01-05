@@ -31,7 +31,18 @@ global _main
 
 ;--------------------------Kernel Main starts--------------------------
 _main:
-	jmp _main
+	mov		dh, VGA_COLOR_LIGHT_GREY
+    mov		dl, VGA_COLOR_BLACK
+    call	terminal_set_color
+    mov		esi, hello_string
+    call	terminal_write_string
+
+	cli
+
+.hang:
+    hlt
+    jmp		.hang
+	jmp		_main
 ;--------------------------Kernel Main ends--------------------------
 	
 ; The following parts are copied from https://wiki.osdev.org/Bare_Bones_with_NASM
