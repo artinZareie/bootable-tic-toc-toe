@@ -195,3 +195,23 @@ terminal_write_string:
     popa
     ret
 ;--------------------------terminal_write_string ends--------------------------
+
+; TODO: Change because in protected mode 0x10 interrupts are not allowed.
+; IN = Nothing
+; OUT = Nothing
+;--------------------------terminal_clear starts--------------------------
+terminal_clear:
+	pusha
+
+	mov ah, 0x06
+	mov al, 0
+	mov bh, 0x07
+	mov ch, 0
+	mov cl, 0
+	mov dh, VGA_HEIGHT - 1
+	mov dl, VGA_WIDTH - 1
+	int 0x10
+
+	popa
+	ret
+;--------------------------terminal_clear ends--------------------------
