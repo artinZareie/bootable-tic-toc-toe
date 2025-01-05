@@ -103,22 +103,19 @@ terminal_putentryat:
 
 
 ; IN = al: ASCII char
+; OUT = dx: New position
 ;--------------------------terminal_putchar starts--------------------------
 terminal_putchar:
-	cmp al, 0x0A
-	jne .nlf
-
-	push eax
-	xor  eax, eax
-	mov [terminal_column], al
-	inc BYTE [terminal_row]
-	pop eax
-
-	jmp .exit_func
-
-.nlf:
     mov dx, [terminal_cursor_pos] ; This loads terminal_column at DH, and terminal_row at DL
 
+	cmp al, 0xA
+    jne .nlf
+
+	mov dh, 0
+	inc dl
+	jmp .cursor_moved
+
+.nlf:
     call terminal_putentryat
     
     inc dh
@@ -138,7 +135,6 @@ terminal_putchar:
     ; Store new cursor position 
     mov [terminal_cursor_pos], dx
 
-.exit_func:
     ret
 ;--------------------------terminal_putchar ends--------------------------
 

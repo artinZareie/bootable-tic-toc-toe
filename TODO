@@ -1,3 +1,0 @@
-1. Fix newline in `putchar` in kernel.asm.
-2. Fix direct-test.
-3. Read the documentation about how grub configuration is done.
