@@ -36,6 +36,7 @@ _main:
     call	terminal_set_color
     mov		esi, hello_string
     call	terminal_write_string
+    call	terminal_write_string
 
 	cli
 
@@ -96,7 +97,6 @@ terminal_putentryat:
     mov byte [0xB8000 + ebx], al
     mov byte [0xB8001 + ebx], dl
 
-
     popa
     ret
 ;--------------------------terminal_putentryat ends--------------------------
@@ -105,6 +105,18 @@ terminal_putentryat:
 ; IN = al: ASCII char
 ;--------------------------terminal_putchar starts--------------------------
 terminal_putchar:
+	cmp al, 0x0A
+	jne .nlf
+
+	push eax
+	xor  eax, eax
+	mov [terminal_column], al
+	inc BYTE [terminal_row]
+	pop eax
+
+	jmp .exit_func
+
+.nlf:
     mov dx, [terminal_cursor_pos] ; This loads terminal_column at DH, and terminal_row at DL
 
     call terminal_putentryat
@@ -126,6 +138,7 @@ terminal_putchar:
     ; Store new cursor position 
     mov [terminal_cursor_pos], dx
 
+.exit_func:
     ret
 ;--------------------------terminal_putchar ends--------------------------
 
@@ -186,9 +199,3 @@ terminal_write_string:
     popa
     ret
 ;--------------------------terminal_write_string ends--------------------------
-
-; Exercises:
-; - Newline support
-; - Terminal scrolling when screen is full
-; Note: 
-; - The string is looped through twice on printing. 

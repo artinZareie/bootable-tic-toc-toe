@@ -8,6 +8,7 @@ KERNEL_SRC = kernel.asm
 BOOT_SRC = boot.asm
 LINKER_SCRIPT = linkder.ld
 OUTPUT_BIN = build/tic-toc-toe.bin
+ISOBIN = isodir/boot/tic-toc-toe.bin
 ISO_OUTPUT = build/tic-toc-toe.iso
 GRUB_CFG = grub.cfg
 
@@ -37,13 +38,13 @@ link:
 iso: link
 	@echo "Creating bootable ISO..."
 	mkdir -p $(GRUB_DIR)
-	cp $(OUTPUT_BIN) isodir/boot/tic-toc-toe.bin
+	cp $(OUTPUT_BIN) $(ISOBIN)
 	cp $(GRUB_CFG) $(GRUB_DIR)/grub.cfg
 	$(MKRESCUE) -o $(ISO_OUTPUT) $(ISO_DIR)
 
 direct-test:
 	@echo "Running direct test with QEMU..."
-	$(QEMU) -kernel $(OUTPUT_BIN)
+	$(QEMU) -kernel $(ISOBIN)
 
 medium-test:
 	@echo "Running medium test with QEMU (ISO)..."
