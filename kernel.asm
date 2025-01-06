@@ -108,7 +108,7 @@ terminal_putentryat:
 terminal_putchar:
     mov dx, [terminal_cursor_pos] ; This loads terminal_column at DH, and terminal_row at DL
 
-	cmp al, 0xA
+    cmp al, 0xA
     jne .nlf
 
 	mov dh, 0
