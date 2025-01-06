@@ -6,10 +6,10 @@ ISO_DIR = isodir
 GRUB_DIR = $(ISO_DIR)/boot/grub
 KERNEL_SRC = kernel.asm
 BOOT_SRC = boot.asm
-LINKER_SCRIPT = linkder.ld
-OUTPUT_BIN = build/tic-toc-toe.bin
-ISOBIN = isodir/boot/tic-toc-toe.bin
-ISO_OUTPUT = build/tic-toc-toe.iso
+LINKER_SCRIPT = linker.ld
+OUTPUT_BIN = $(BUILD_DIR)/tic-toc-toe.bin
+ISOBIN = $(ISO_DIR)/boot/tic-toc-toe.bin
+ISO_OUTPUT = $(BUILD_DIR)/tic-toc-toe.iso
 GRUB_CFG = grub.cfg
 
 # Tools
@@ -21,13 +21,14 @@ MKRESCUE = grub-mkrescue
 
 # Compiler and linker options
 NASM_FLAGS = -f elf32
-GCC_FLAGS = -T $(LINKER_SCRIPT) -o $(OUTPUT_BIN) -ffreestanding -O2 -nostdlib
+GCC_FLAGS = -T $(LINKER_SCRIPT) -o $(OUTPUT_BIN) -ffreestanding -O2 -nostdlib 
 GCC_LIBS = -lgcc
 
 all: compile link iso
 
 compile:
 	@echo "Compiling kernel and bootloader..."
+	mkdir -p $(BUILD_DIR)
 	$(NASM) $(NASM_FLAGS) $(KERNEL_SRC) -o $(BUILD_DIR)/kernel.o
 	$(NASM) $(NASM_FLAGS) $(BOOT_SRC) -o $(BUILD_DIR)/boot.o
 
@@ -44,11 +45,15 @@ iso: link
 
 direct-test:
 	@echo "Running direct test with QEMU..."
-	$(QEMU) -kernel $(ISOBIN)
+	$(QEMU) -kernel $(OUTPUT_BIN)
 
 medium-test:
 	@echo "Running medium test with QEMU (ISO)..."
 	$(QEMU) -cdrom $(ISO_OUTPUT)
+
+grub-test:
+	@echo "Testing with GRUB boot method..."
+	$(QEMU) -drive format=raw,file=$(ISO_OUTPUT)
 
 verify:
 	@echo "Verifying bootloader with GRUB verification script..."
@@ -56,5 +61,4 @@ verify:
 
 clean:
 	@echo "Cleaning build and ISO files..."
-	rm -f $(BUILD_DIR)/*.o $(OUTPUT_BIN) $(ISO_OUTPUT)
-	rm -rf $(ISO_DIR)
+	rm -rf $(BUILD_DIR) $(ISO_DIR)
