@@ -31,7 +31,7 @@ global _main
 
 ;--------------------------Kernel Main starts--------------------------
 _main:
-	mov		dh, VGA_COLOR_LIGHT_GREY
+    mov		dh, VGA_COLOR_LIGHT_GREY
     mov		dl, VGA_COLOR_BLACK
     call	terminal_set_color
     mov		esi, hello_string
