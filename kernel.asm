@@ -38,12 +38,12 @@ _main:
     call	terminal_write_string
     call	terminal_write_string
 
-	cli
+    cli
 
 .hang:
     hlt
     jmp		.hang
-	jmp		_main
+    jmp		_main
 ;--------------------------Kernel Main ends--------------------------
 	
 ; The following parts are copied from https://wiki.osdev.org/Bare_Bones_with_NASM
