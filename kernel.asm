@@ -111,9 +111,9 @@ terminal_putchar:
     cmp al, 0xA
     jne .nlf
 
-	mov dh, 0
-	inc dl
-	jmp .cursor_moved
+    mov dh, 0
+    inc dl
+    jmp .cursor_moved
 
 .nlf:
     call terminal_putentryat
