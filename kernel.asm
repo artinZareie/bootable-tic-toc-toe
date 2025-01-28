@@ -19,7 +19,7 @@ VGA_COLOR_LIGHT_MAGENTA		EQU		13
 VGA_COLOR_LIGHT_BROWN		EQU		14
 VGA_COLOR_WHITE			EQU		15
 
-hello_string db "Hello, kernel World!", 0xA, 0 ; 0xA = line feed
+hello_string db "This is a multi-line", 0xA, "text.", 0xA, 0 ; 0xA = line feed
 
 terminal_color db 0
 
@@ -34,8 +34,14 @@ _main:
     mov		dh, VGA_COLOR_LIGHT_GREY
     mov		dl, VGA_COLOR_BLACK
     call	terminal_set_color
+
     mov		esi, hello_string
     call	terminal_write_string
+
+    mov		esi, hello_string
+    call	terminal_write_string
+
+    mov		esi, hello_string
     call	terminal_write_string
 
     cli
@@ -55,19 +61,18 @@ _main:
 ; Other registers preserved
 ; --------------------------terminal_getidx starts--------------------------
 terminal_getidx:
-    push ax; preserve registers
+    push eax
+    push ebx
 
-    shl dh, 1 ; multiply by two because every entry is a word that takes up 2 bytes
-
-    mov al, VGA_WIDTH
+    mov ax, VGA_WIDTH
     mul dl
-    mov dl, al
+    movzx bx, dh
+    add ax, bx
+    shl ax, 1
+    mov dx, ax
 
-    shl dl, 1 ; same
-    add dl, dh
-    mov dh, 0
-
-    pop ax
+    pop ebx
+    pop eax
     ret
 ;--------------------------terminal_getidx ends--------------------------
 
@@ -113,6 +118,14 @@ terminal_putchar:
 
     mov dh, 0
     inc dl
+
+    cmp dl, VGA_HEIGHT
+    jne .not_out_of_screen
+
+    call terminal_clear
+
+.not_out_of_screen:
+
     jmp .cursor_moved
 
 .nlf:
@@ -196,22 +209,27 @@ terminal_write_string:
     ret
 ;--------------------------terminal_write_string ends--------------------------
 
-; TODO: Change because in protected mode 0x10 interrupts are not allowed.
 ; IN = Nothing
-; OUT = Nothing
+; OUT = sets dx to 0
 ;--------------------------terminal_clear starts--------------------------
 terminal_clear:
-	pusha
+    pusha
 
-	mov ah, 0x06
-	mov al, 0
-	mov bh, 0x07
-	mov ch, 0
-	mov cl, 0
-	mov dh, VGA_HEIGHT - 1
-	mov dl, VGA_WIDTH - 1
-	int 0x10
+    mov edi, 0xB8000
+    mov ecx, VGA_WIDTH * VGA_HEIGHT
+    mov al, 0x20
+    mov ah, [terminal_color]
 
-	popa
-	ret
+.loop:
+    mov [edi], ax
+    add edi, 2
+    loop .loop
+
+    mov word [terminal_cursor_pos], 0
+
+    popa
+
+    mov dx, 0
+
+    ret
 ;--------------------------terminal_clear ends--------------------------
