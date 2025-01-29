@@ -49,7 +49,7 @@ direct-test:
 
 medium-test:
 	@echo "Running medium test with QEMU (ISO)..."
-	$(QEMU) -cdrom $(ISO_OUTPUT) -vga std
+	$(QEMU) -cdrom $(ISO_OUTPUT) -vga std -s
 
 grub-test:
 	@echo "Testing with GRUB boot method..."
