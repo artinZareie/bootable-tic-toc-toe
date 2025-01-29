@@ -27,10 +27,19 @@ terminal_column db 0
 
 ; Game data
 title db "Tic Tac Toe", 0
+ask_character_string db "Please choose X or O: ", 0
+ask_repeat_string db "Please only choose one of X or O, and not any other letters: ", 0
 row_format  db	"| | | |", 0
 row_sep	    db	"-------", 0
 game_state times 9 db 0		; 0 is empty, 1 is X and 2 is O
 current_player db 1
+player_choose db -1
+; PS2 set1 to ASCII
+scancode_table:							; Used to convert read codes to ASCII codes.
+    db 0, 27, '1234567890-=', 8, 0, 'qwertyuiop[]', 10
+    db 0, 'asdfghjkl;', 0, 0, 0, 0, 'zxcvbnm,./', 0, '*'
+    db 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    db '-', 0, 0, 0, '+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 global _main
 
@@ -43,23 +52,9 @@ _main:
     ; Fill the screen with chosen color.
     call terminal_clear
     
-    ; Print game title
-    mov byte [terminal_row], 3     ; Row 3
-    mov byte [terminal_column], 34 ; (80-11)/2=34.5≈34
-    mov esi, title
-    call terminal_write_string
-    
-    ; Initialize test game state (X in corners, O in center)
-    mov byte [game_state], 1
-    mov byte [game_state + 4], 2
-    mov byte [game_state + 8], 1
-     
     ; Draw the game board
     call draw_board
-
-    mov esi, title
-    call terminal_write_string
-
+    call ask_character
     cli
 
 .hang:
@@ -68,10 +63,61 @@ _main:
     jmp		_main
 ;--------------------------Kernel Main ends--------------------------
 
+;--------------------------ask_character starts--------------------------
+ask_character:
+    pusha
+    mov ebp, esp
+
+    mov esi, ask_character_string
+    call terminal_write_string
+
+.read_and_check:
+
+    call read_char
+    call terminal_putchar
+
+    cmp al, 'x'
+    jne .case_o
+
+    mov byte [player_choose], 0
+
+    jmp .done
+
+.case_o:
+    cmp al, 'o'
+    jne .loop
+
+    mov byte [player_choose], 1
+
+    jmp .done
+
+.loop:
+    call terminal_clear
+    call draw_board
+
+    mov esi, ask_repeat_string
+    call terminal_write_string
+
+    jmp .read_and_check
+
+.done:
+    call terminal_clear
+    call draw_board
+
+    popa
+    ret
+;--------------------------ask_character ends--------------------------
+
 ;--------------------------draw_board starts--------------------------
 draw_board:
     pusha
     mov ebp, esp
+
+    ; Print game title
+    mov byte [terminal_row], 3     ; Row 3
+    mov byte [terminal_column], 34 ; (80-11)/2=34.5≈34
+    mov esi, title
+    call terminal_write_string
 
     mov byte [terminal_row], 4
     mov byte [terminal_column], 36 ; (80-7)/2=36.5≈36
@@ -320,3 +366,34 @@ terminal_clear:
 
     ret
 ;--------------------------terminal_clear ends--------------------------
+
+;--------------------------read_char starts--------------------------
+; OUT = AL: ASCII character. Everything will be lower-case.
+read_char:
+    push edx
+    push ecx
+.wait_for_key:
+    ; Check if keyboard has data
+    in al, 0x64
+    test al, 1
+    jz .wait_for_key
+
+    ; Read scancode
+    in al, 0x60
+
+    ; Check if key is released (ignore)
+    test al, 0x80
+    jnz .wait_for_key
+
+    ; Convert scancode to ASCII
+    movzx eax, al
+    mov al, [scancode_table + eax]
+
+    test al, al      ; Ignore unmapped keys
+    jz .wait_for_key
+
+.done:
+    pop ecx
+    pop edx
+    ret
+;--------------------------read_char ends--------------------------
