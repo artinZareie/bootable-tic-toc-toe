@@ -72,7 +72,7 @@ _main:
     call draw_board
     call ask_character
 
-    jmp _main
+    call play
 
     cli
 
