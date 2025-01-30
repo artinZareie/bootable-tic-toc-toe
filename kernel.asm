@@ -37,7 +37,6 @@ player_wins_string db "Player wins!", 0
 computer_wins_string db "Computer wins!", 0
 tie_string db "It's a tie!", 0
 game_state times 9 db 0		; 0 is empty, 1 is X and 2 is O
-current_player db 1
 player_choice db -1
 
 ; Array of win conditions
@@ -229,7 +228,11 @@ valid_cell:
 ; IN = NOTHING
 ; OUT = eax (int|0 is ongoing, 1 is X's win, 2 is O's win, 3 is tie)
 game_status:
-    pusha
+    push ecx
+    push esi
+    push ebx
+    push edx
+
     mov ecx, 0
 
 .win_check_loop:
@@ -253,8 +256,7 @@ game_status:
     jne .next_win_check
 
     movzx eax, al
-    popa
-    ret
+    jmp .return
 
 .next_win_check:
     inc ecx
@@ -276,12 +278,16 @@ game_status:
 
 .return_0:
     xor eax, eax
-    popa
-    ret
+    jmp .return
 
 .return_3:
     mov eax, 3
-    popa
+
+.return:
+    pop edx
+    pop ebx
+    pop esi
+    pop ecx
     ret
 ;--------------------------game_status ends--------------------------
 
@@ -366,7 +372,7 @@ player_play:
     push ebx
 
     call ask_player	; Now eax is cell
-    movzx ebx, BYTE [current_player]
+    movzx ebx, BYTE [player_choice]
     inc ebx
 
     mov BYTE game_state[eax], bl
@@ -392,13 +398,13 @@ backtrack:
     push eax            ; esp + 4 is game_status
 
     mov eax, 2
-    movzx ebx, BYTE [current_player]
+    movzx ebx, BYTE [player_choice]
     sub eax, ebx
 
     cmp eax, [esp + 4]
     je .return_1
 
-    movzx eax, BYTE [current_player]
+    movzx eax, BYTE [player_choice]
     add eax, 1
 
     cmp eax, [esp + 4]
@@ -438,12 +444,12 @@ backtrack:
     jz .set_player
 
     mov eax, 2
-    movzx edx, BYTE [current_player]
+    movzx edx, BYTE [player_choice]
     sub eax, edx
     jmp .store_grid
 
 .set_player:
-    movzx eax, BYTE [current_player]
+    movzx eax, BYTE [player_choice]
     add eax, 1
 
 .store_grid:
@@ -534,7 +540,7 @@ computer_play:
 
     ; Set game_state[i] = 2 - player
     mov eax, 2
-    movzx edx, BYTE [current_player]
+    movzx edx, BYTE [player_choice]
     sub eax, edx
     mov BYTE [game_state + esi], al
 
@@ -564,7 +570,7 @@ computer_play:
 
     ; Set game_state[best_move] = 2 - player
     mov eax, 2
-    movzx edx, BYTE [current_player]
+    movzx edx, BYTE [player_choice]
     sub eax, edx
     mov BYTE [game_state + ecx], al
 
@@ -589,7 +595,7 @@ play:
     cmp eax, 0
     jne .game_over
 
-    mov al, [current_player]
+    mov al, [player_choice]
     cmp al, 0
     jne .computer_first
 

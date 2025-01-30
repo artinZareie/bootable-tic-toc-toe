@@ -29,8 +29,8 @@ all: compile link iso
 compile:
 	@echo "Compiling kernel and bootloader..."
 	mkdir -p $(BUILD_DIR)
-	$(NASM) $(NASM_FLAGS) $(KERNEL_SRC) -o $(BUILD_DIR)/kernel.o
-	$(NASM) $(NASM_FLAGS) $(BOOT_SRC) -o $(BUILD_DIR)/boot.o
+	$(NASM) $(NASM_FLAGS) $(KERNEL_SRC) -o $(BUILD_DIR)/kernel.o -g
+	$(NASM) $(NASM_FLAGS) $(BOOT_SRC) -o $(BUILD_DIR)/boot.o -g
 
 link:
 	@echo "Linking kernel and bootloader..."
@@ -49,7 +49,11 @@ direct-test:
 
 medium-test:
 	@echo "Running medium test with QEMU (ISO)..."
-	$(QEMU) -cdrom $(ISO_OUTPUT) -vga std -s
+	$(QEMU) -cdrom $(ISO_OUTPUT) -vga std
+
+medium-test-db:
+	@echo "Running medium test with QEMU (ISO)..."
+	$(QEMU) -cdrom $(ISO_OUTPUT) -vga std -s -S
 
 grub-test:
 	@echo "Testing with GRUB boot method..."
@@ -62,3 +66,7 @@ verify:
 clean:
 	@echo "Cleaning build and ISO files..."
 	rm -rf $(BUILD_DIR) $(ISO_DIR)
+
+debug:
+	@echo "Starting GDB with predefined commands..."
+	gdb -x gdb_commands.gdb
