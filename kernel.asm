@@ -313,7 +313,6 @@ ask_player:
     push edi
     push ebx
 
-.ask_loop:
     mov esi, ask_place_string
     call terminal_write_string
 
@@ -323,7 +322,22 @@ ask_player:
 
     call compute_cell
     mov [ebp - 12], eax
+    jmp .loop_cond
 
+.ask_loop:
+    call terminal_clear
+    call draw_board
+    mov esi, ask_repeat_place_string
+    call terminal_write_string
+
+    call read_xy
+    mov [ebp - 4], eax
+    mov [ebp - 8], edx
+
+    call compute_cell
+    mov [ebp - 12], eax
+
+.loop_cond
     mov eax, [ebp - 4]
     cmp eax, 1
     jl .ask_loop
@@ -346,6 +360,7 @@ ask_player:
     pop ebx
     pop edi
     pop esi
+    add esp, 12
     mov esp, ebp
     pop ebp
     ret
@@ -370,8 +385,8 @@ player_play:
 ;--------------------------player_play ends--------------------------
 
 ;--------------------------backtrack starts--------------------------
-; IN = eax (bool | is_ai_turn)
-; OUT = eax (int | score)
+; IN = (bool is_ai_turn) pushed on stack
+; OUT = eax (int | score) (Because it was recursive, using stack was easier.)
 backtrack:
     push ebp
     mov ebp, esp
@@ -379,120 +394,110 @@ backtrack:
     push esi
     push edi
 
-    ; Call game_status to check the current game state
     call game_status
-    push eax            ; Save game_status result on the stack
+    push eax            ; push game_status result
 
-    ; Check if the game is over
+    ; Gameover conditions
     mov eax, 2
     movzx ebx, BYTE [player_choice]
-    sub eax, ebx        ; eax = 2 - player_choice (AI's symbol)
-
-    cmp eax, [esp]      ; Compare with game_status result
-    je .return_1        ; If AI wins, return 1
+    sub eax, ebx        ; eax = 2 - player_choice 
+    cmp eax, [esp]
+    je .return_1
 
     movzx eax, BYTE [player_choice]
     add eax, 1          ; eax = player_choice + 1 (player's symbol)
-
-    cmp eax, [esp]      ; Compare with game_status result
-    je .return_m1       ; If player wins, return -1
+    cmp eax, [esp]
+    je .return_m1
 
     mov eax, 3
-    cmp eax, [esp]      ; Compare with game_status result
-    je .return_0        ; If it's a tie, return 0
+    cmp eax, [esp]
+    je .return_0
 
-    ; Initialize best_score based on is_ai_turn
-    mov eax, [ebp + 8]  ; Load is_ai_turn from the stack
+    mov eax, [ebp + 8]  ; Load is_ai_turn
     test eax, eax
-    jz .set_max         ; If is_ai_turn is false, set best_score to INT_MAX
+    jz .set_max         ; If player's turn, minimize
 
-    mov ebx, 0x80000000 ; INT_MIN (AI wants to maximize)
+    mov ebx, 0x80000000 ; INT_MIN (maximizing)
     jmp .loop_start
 
 .set_max:
-    mov ebx, 0x7FFFFFFF ; INT_MAX (Player wants to minimize)
+    mov ebx, 0x7FFFFFFF ; INT_MAX (minimizing)
 
 .loop_start:
     mov esi, 0          ; i = 0
 
 .loop:
     cmp esi, 9
-    jge .return_best    ; If i >= 9, return best_score
+    jge .return_best
 
-    ; Check if the cell is valid
-    push esi
+    mov eax, esi
     call valid_cell
-    add esp, 4          ; Clean up the stack
-    test eax, eax
-    jz .next_iteration  ; If the cell is invalid, skip
+    test al, al
+    jz .next_iteration
 
-    ; Set game_state[i] = is_ai_turn ? (2 - player_choice) : (player_choice + 1)
-    mov eax, [ebp + 8]  ; Load is_ai_turn
+    ; Set cell to player's symbol
+    mov eax, [ebp + 8]
     test eax, eax
     jz .set_player
-
     mov eax, 2
-    movzx edx, BYTE [player_choice]
-    sub eax, edx        ; eax = 2 - player_choice (AI's symbol)
-    jmp .store_grid
+    sub eax, [player_choice]
+    jmp .store_cell
 
 .set_player:
     movzx eax, BYTE [player_choice]
-    add eax, 1          ; eax = player_choice + 1 (player's symbol)
+    add eax, 1
 
-.store_grid:
+.store_cell:
     mov BYTE [game_state + esi], al
 
-    ; Recursive call: backtrack(!is_ai_turn)
-    push esi            ; Save i
-    mov eax, [ebp + 8]  ; Load is_ai_turn
-    xor eax, 1          ; Flip is_ai_turn
+    ; Recursive call with flipped is_ai_turn
+    mov eax, [ebp + 8]
+    xor eax, 1
     push eax
     call backtrack
-    add esp, 4          ; Clean up the stack
-    pop esi             ; Restore i
+    add esp, 4
 
-    ; Restore game_state[i] = 0
+    ; Restore cell
     mov BYTE [game_state + esi], 0
 
-    ; Update best_score based on is_ai_turn
-    mov edx, [ebp + 8]  ; Load is_ai_turn
+    ; Update best_score
+    mov edx, [ebp + 8]
     test edx, edx
     jz .minimize
 
-    ; Maximize score for AI
+    ; Maximize
     cmp eax, ebx
     jle .next_iteration
-    mov ebx, eax        ; Update best_score
+    mov ebx, eax
     jmp .next_iteration
 
 .minimize:
-    ; Minimize score for player
+    ; Minimize
     cmp eax, ebx
     jge .next_iteration
-    mov ebx, eax        ; Update best_score
+    mov ebx, eax
 
 .next_iteration:
     inc esi
     jmp .loop
 
 .return_best:
-    mov eax, ebx        ; Return best_score
+    mov eax, ebx
     jmp .done
 
 .return_0:
-    mov eax, 0          ; Return 0 (tie)
+    mov eax, 0
     jmp .done
 
 .return_m1:
-    mov eax, -1         ; Return -1 (player wins)
+    mov eax, -1
     jmp .done
 
 .return_1:
-    mov eax, 1          ; Return 1 (AI wins)
+    mov eax, 1
 
 .done:
-    add esp, 4          ; Clean up the stack (game_status result)
+    add esp, 4
     pop edi
     pop esi
     pop ebx
@@ -501,7 +506,6 @@ backtrack:
 ;--------------------------backtrack ends--------------------------
 
 ;--------------------------computer_play starts--------------------------
-; OUT = NOTHING
 computer_play:
     push ebp
     mov ebp, esp
@@ -509,56 +513,50 @@ computer_play:
     push esi
     push edi
 
-    mov ebx, -1           ; best_move = -1
-    mov eax, 0x80000000   ; best_score = INT_MIN
+    mov ecx, -1           ; best_move = -1
+    mov ebx, 0x80000000   ; best_score = INT_MIN
 
     mov esi, 0            ; i = 0
+
 .loop:
     cmp esi, 9
-    jge .check_best_move  ; If i >= 9, exit the loop
+    jge .check_best_move
 
-    ; Check if the cell is valid
-    push esi
+    mov eax, esi
     call valid_cell
-    add esp, 4            ; Clean up the stack
-    test eax, eax
-    jz .next_iteration    ; If the cell is invalid, skip
+    test al, al
+    jz .next_iteration
 
-    ; Set game_state[i] = 2 - player_choice (AI's symbol)
+    ; Set cell to AI's symbol
     mov eax, 2
-    movzx edx, BYTE [player_choice]
-    sub eax, edx
+    sub eax, [player_choice]
     mov BYTE [game_state + esi], al
 
-    ; Call backtrack(false) to evaluate the move
-    push esi              ; Save i
-    xor eax, eax          ; is_ai_turn = false
-    push eax
+    ; Call backtrack(false)
+    push DWORD 0
     call backtrack
-    add esp, 4            ; Clean up the stack
-    pop esi               ; Restore i
+    add esp, 4
 
-    ; Restore game_state[i] = 0
+    ; Restore cell
     mov BYTE [game_state + esi], 0
 
-    ; Check if the current score is better than best_score
+    ; Update best_score and best_move
     cmp eax, ebx
     jle .next_iteration
-    mov ebx, eax          ; Update best_score
-    mov ecx, esi          ; Update best_move
+    mov ebx, eax
+    mov ecx, esi
 
 .next_iteration:
     inc esi
     jmp .loop
 
 .check_best_move:
-    cmp ebx, 0x80000000   ; If best_move == -1, do nothing
+    cmp ecx, -1
     je .done
 
-    ; Set game_state[best_move] = 2 - player_choice (AI's symbol)
+    ; Apply best_move
     mov eax, 2
-    movzx edx, BYTE [player_choice]
-    sub eax, edx
+    sub eax, [player_choice]
     mov BYTE [game_state + ecx], al
 
 .done:
@@ -872,8 +870,6 @@ read_xy:
     cmp al, 9
     ja .read_y
     movzx eax, al
-
-    xchg eax, edx
 
     ret
 ;--------------------------read_xy ends--------------------------
