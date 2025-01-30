@@ -611,13 +611,14 @@ play:
     call terminal_clear
     call draw_board
 
+    movzx ebx, BYTE [player_choice]
+    inc ebx
     call game_status
-    cmp eax, 1
-    je .player_wins
-    cmp eax, 2
-    je .computer_wins
     cmp eax, 3
     je .tie
+    cmp eax, ebx
+    je .player_wins
+    jne .computer_wins
 
 .player_wins:
     ; Print "Player wins!"
