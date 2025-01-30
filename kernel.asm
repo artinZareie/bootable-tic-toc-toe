@@ -29,11 +29,27 @@ terminal_column db 0
 title db "Tic Tac Toe", 0
 ask_character_string db "Please choose X or O: ", 0
 ask_repeat_string db "Please only choose one of X or O, and not any other letters: ", 0
+ask_place_string db "Enter row (1-3) and column (1-3): "
+ask_repeat_place_string db "Invalid move! Enter row (1-3) and column (1-3): "
 row_format  db	"| | | |", 0
 row_sep	    db	"-------", 0
+player_wins_string db "Player wins!", 0
+computer_wins_string db "Computer wins!", 0
+tie_string db "It's a tie!", 0
 game_state times 9 db 0		; 0 is empty, 1 is X and 2 is O
 current_player db 1
-player_choose db -1
+player_choice db -1
+
+; Array of win conditions
+win_conds   db 0, 1, 2
+	    db 3, 4, 5
+	    db 6, 7, 8
+	    db 0, 3, 6
+	    db 1, 4, 7
+	    db 2, 5, 8
+	    db 0, 4, 8
+	    db 2, 4, 6
+
 ; PS2 set1 to ASCII
 scancode_table:							; Used to convert read codes to ASCII codes.
     db 0, 27, '1234567890-=', 8, 0, 'qwertyuiop[]', 10
@@ -55,6 +71,9 @@ _main:
     ; Draw the game board
     call draw_board
     call ask_character
+
+    jmp _main
+
     cli
 
 .hang:
@@ -79,7 +98,7 @@ ask_character:
     cmp al, 'x'
     jne .case_o
 
-    mov byte [player_choose], 0
+    mov byte [player_choice], 0
 
     jmp .done
 
@@ -87,7 +106,7 @@ ask_character:
     cmp al, 'o'
     jne .loop
 
-    mov byte [player_choose], 1
+    mov byte [player_choice], 1
 
     jmp .done
 
@@ -184,6 +203,454 @@ draw_board:
     popa
     ret
 ;--------------------------draw_board ends--------------------------
+
+;--------------------------valid_cell starts--------------------------
+; IN = eax (cell number)
+; OUT = al (bool|is the cell valid and empty?)
+valid_cell:
+    cmp eax, 0
+    jl .ret_false
+
+    cmp eax, 8
+    jg .ret_false
+
+    cmp BYTE [game_state + eax], 0
+    jne .ret_false
+
+    mov al, 1
+    ret
+
+.ret_false:
+    mov al, 0
+    ret
+;--------------------------valid_cell ends--------------------------
+
+;--------------------------game_status starts--------------------------
+; IN = NOTHING
+; OUT = eax (int|0 is ongoing, 1 is X's win, 2 is O's win, 3 is tie)
+game_status:
+    pusha
+    mov ecx, 0
+
+.win_check_loop:
+    cmp ecx, 8
+    jge .check_draw
+
+    mov esi, ecx
+    imul esi, 3
+    movzx eax, BYTE [win_conds + esi]
+    movzx ebx, BYTE [win_conds + esi + 1]
+    movzx edx, BYTE [win_conds + esi + 2]
+
+    mov al, BYTE [game_state + eax]
+    test al, al
+    jz .next_win_check
+
+    cmp al, BYTE [game_state + ebx]
+    jne .next_win_check
+
+    cmp al, BYTE [game_state + edx]
+    jne .next_win_check
+
+    movzx eax, al
+    popa
+    ret
+
+.next_win_check:
+    inc ecx
+    jmp .win_check_loop
+
+.check_draw:
+    mov ecx, 0
+
+.draw_loop:
+    cmp ecx, 9
+    jge .return_3
+
+    mov al, BYTE [game_state + ecx]
+    test al, al
+    jz .return_0
+
+    inc ecx
+    jmp .draw_loop
+
+.return_0:
+    xor eax, eax
+    popa
+    ret
+
+.return_3:
+    mov eax, 3
+    popa
+    ret
+;--------------------------game_status ends--------------------------
+
+;--------------------------compute_cell starts--------------------------
+;IN=eax(int|y), edx(int|x)
+;OUT=eax(int|cell number) = 3 * (y - 1) + x - 1
+compute_cell:
+    dec eax
+    lea eax, [eax + 2 * eax]
+    lea eax, [eax + edx - 1]
+;--------------------------compute_cell ends--------------------------
+
+;--------------------------ask_player starts--------------------------
+;IN=NOTHING
+;OUT=eax(int|cell)
+ask_player:
+    push ebp
+    mov ebp, esp
+    push edx
+    push esi
+
+    mov esi, ask_place_string
+    call terminal_write_string
+
+    call read_xy
+    push eax		; esp + 12 will be x
+    push edx		; esp + 8 will be y
+    call compute_cell	; esp + 4 will be cell
+    push eax
+
+    jmp .while_cond
+
+.while_body:
+    mov esi, ask_repeat_place_string
+    call terminal_write_string
+
+    add esp, 12 ; Clear the stack
+
+    call read_xy
+    push eax		; esp + 12 will be x
+    push edx		; esp + 8 will be y
+    call compute_cell	; esp + 4 will be cell
+    push eax
+
+.while_cond:
+    mov eax, [esp + 12]	 ; Load x
+
+    cmp eax, 1
+    jl .while_body	; x < 1
+
+    cmp eax, 3
+    jg .while_body	; x > 3
+
+    mov eax, [esp + 8]	; Load y
+
+    cmp eax, 1
+    jl .while_body	; y < 1
+
+    cmp eax, 3
+    jg .while_body	; y > 3
+
+    mov eax, [esp + 4]	; Load cell
+    call valid_cell
+    test al, al
+    jz .while_body
+
+.while_out:
+
+    mov eax, [esp + 4]
+    add esp, 12 ; Clear the stack
+    pop esi
+    pop edx
+    pop ebp
+    ret
+;--------------------------ask_player ends--------------------------
+
+;--------------------------player_play ends--------------------------
+;IN=Nothing
+;OUT=Nothing
+player_play:
+    push eax
+    push ebx
+
+    call ask_player	; Now eax is cell
+    movzx ebx, BYTE [current_player]
+    inc ebx
+
+    mov BYTE game_state[eax], bl
+    
+    pop ebx
+    pop eax
+    ret
+;--------------------------player_play ends--------------------------
+
+;--------------------------backtrack starts--------------------------
+; IN=eax(bool|is_ai_turn)
+; OUT=eax(int|score)
+backtrack:
+    push ebp
+    mov ebp, esp
+    push ecx
+    push edx
+    push ebx
+    push esi
+    push edi
+
+    call game_status
+    push eax            ; esp + 4 is game_status
+
+    mov eax, 2
+    movzx ebx, BYTE [current_player]
+    sub eax, ebx
+
+    cmp eax, [esp + 4]
+    je .return_1
+
+    movzx eax, BYTE [current_player]
+    add eax, 1
+
+    cmp eax, [esp + 4]
+    je .return_m1
+
+    mov eax, 3
+    cmp eax, [esp + 4]
+    je .return_0
+
+    ; Initialize best_score
+    mov eax, [ebp + 8]    ; is_ai_turn
+    test eax, eax
+    jz .set_max           ; If false, set to INT_MAX (our turn)
+
+    mov ebx, 0x80000000   ; INT_MIN
+    jmp .loop_start
+
+.set_max:
+    mov ebx, 0x7FFFFFFF   ; INT_MAX
+
+.loop_start:
+    mov esi, 0            ; i = 0
+
+.loop:
+    cmp esi, 9
+    jge .return_best
+    
+    push esi
+    call valid_cell
+    test eax, eax
+    pop esi
+    jz .next_iteration
+
+    ; Set grid[i] = is_ai_turn ? (2 - player) : (player + 1)
+    mov eax, [ebp + 8]
+    test eax, eax
+    jz .set_player
+
+    mov eax, 2
+    movzx edx, BYTE [current_player]
+    sub eax, edx
+    jmp .store_grid
+
+.set_player:
+    movzx eax, BYTE [current_player]
+    add eax, 1
+
+.store_grid:
+    mov BYTE [game_state + esi], al
+
+    ; Recursive call: backtrack(!is_ai_turn)
+    push esi             ; Save i
+    push DWORD [ebp + 8] ; Save is_ai_turn
+    xor eax, 1          ; !is_ai_turn
+    push eax
+    call backtrack
+    add esp, 4
+    pop DWORD [ebp + 8]  ; Restore is_ai_turn
+    pop esi              ; Restore i
+
+    ; Restore grid[i] = 0
+    mov BYTE [game_state + esi], 0
+
+    ; Update best_score based on is_ai_turn
+    mov edx, [ebp + 8]
+    test edx, edx
+    jz .minimize
+
+    cmp eax, ebx
+    jle .next_iteration
+    mov ebx, eax        ; Maximize score
+    jmp .next_iteration
+
+.minimize:
+    cmp eax, ebx
+    jge .next_iteration
+    mov ebx, eax        ; Minimize score
+
+.next_iteration:
+    inc esi
+    jmp .loop
+
+.return_best:
+    mov eax, ebx
+    jmp .done
+
+.return_0:
+    mov eax, 0
+    jmp .done
+
+.return_m1:
+    mov eax, -1
+    jmp .done
+
+.return_1:
+    mov eax, 1
+
+.done:
+    sub esp, 4
+    pop edi
+    pop esi
+    pop ebx
+    pop edx
+    pop ecx
+    pop ebp
+    ret
+;--------------------------backtrack ends--------------------------
+
+;--------------------------computer_play starts--------------------------
+; OUT=NOTHING
+computer_play:
+    push ebp
+    mov ebp, esp
+    push ecx
+    push edx
+    push ebx
+    push esi
+    push edi
+
+    mov ebx, -1           ; best_move = -1
+    mov eax, 0x80000000   ; best_score = INT_MIN
+
+    mov esi, 0            ; i = 0
+.loop:
+    cmp esi, 9
+    jge .check_best_move
+
+    push esi
+    call valid_cell
+    test eax, eax
+    pop esi
+    jz .next_iteration
+
+    ; Set game_state[i] = 2 - player
+    mov eax, 2
+    movzx edx, BYTE [current_player]
+    sub eax, edx
+    mov BYTE [game_state + esi], al
+
+    ; Call backtrack(false)
+    push esi
+    xor eax, eax
+    call backtrack
+    pop esi              ; Restore i
+
+    ; Restore game_state[i] = 0
+    mov BYTE [game_state + esi], 0
+
+    ; Check if score > best_score
+    cmp eax, ebx
+    jle .next_iteration
+    
+    mov ebx, eax         ; best_score = score
+    mov ecx, esi         ; best_move = i
+
+.next_iteration:
+    inc esi
+    jmp .loop
+
+.check_best_move:
+    cmp ebx, 0x80000000  ; If best_move == -1, do nothing
+    je .done
+
+    ; Set game_state[best_move] = 2 - player
+    mov eax, 2
+    movzx edx, BYTE [current_player]
+    sub eax, edx
+    mov BYTE [game_state + ecx], al
+
+.done:
+    pop edi
+    pop esi
+    pop ebx
+    pop edx
+    pop ecx
+    pop ebp
+    ret
+;--------------------------computer_play ends--------------------------
+
+;--------------------------play starts--------------------------
+; IN = NOTHING
+; OUT = NOTHING
+play:
+    pusha
+
+.game_loop:
+    call game_status
+    cmp eax, 0
+    jne .game_over
+
+    mov al, [current_player]
+    cmp al, 0
+    jne .computer_first
+
+.player_first:
+    call terminal_clear
+    call draw_board
+    call player_play
+
+    call game_status
+    cmp eax, 0
+    jne .game_over
+
+    call computer_play
+    jmp .game_loop
+
+.computer_first:
+    call computer_play
+
+    call terminal_clear
+    call draw_board
+
+    call game_status
+    cmp eax, 0
+    jne .game_over
+
+    call player_play
+    jmp .game_loop
+
+.game_over:
+    call terminal_clear
+    call draw_board
+
+    call game_status
+    cmp eax, 1
+    je .player_wins
+    cmp eax, 2
+    je .computer_wins
+    cmp eax, 3
+    je .tie
+
+.player_wins:
+    ; Print "Player wins!"
+    mov esi, player_wins_string
+    call terminal_write_string
+    jmp .end
+
+.computer_wins:
+    ; Print "Computer wins!"
+    mov esi, computer_wins_string
+    call terminal_write_string
+    jmp .end
+
+.tie:
+    ; Print "It's a tie!"
+    mov esi, tie_string
+    call terminal_write_string
+
+.end:
+    popa
+    ret
+;--------------------------play ends--------------------------
 	
 ; The following parts are copied from https://wiki.osdev.org/Bare_Bones_with_NASM
 ; So the credits go to collobarators of OSDev.
@@ -397,3 +864,25 @@ read_char:
     pop edx
     ret
 ;--------------------------read_char ends--------------------------
+
+;--------------------------read_xy starts--------------------------
+; OUT = EAX (int | x), EDX (int | y)
+read_xy:
+.read_x:
+    call read_char
+    sub al, '0'
+    cmp al, 9
+    ja .read_x
+    movzx edx, al
+
+.read_y:
+    call read_char
+    sub al, '0'
+    cmp al, 9
+    ja .read_y
+    movzx eax, al
+
+    xchg eax, edx
+
+    ret
+;--------------------------read_xy ends--------------------------
